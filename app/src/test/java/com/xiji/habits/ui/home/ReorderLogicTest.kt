@@ -124,6 +124,19 @@ class ReorderLogicTest {
     }
 
     @Test
+    fun `leaving sorting keeps optimistic order until repository acknowledges it`() {
+        val state = state()
+        val original = listOf(row(1), row(2), row(3))
+        state.sync(original, reorderMode = true)
+        state.move(1, 1)
+        state.sync(original, reorderMode = false)
+        assertEquals("数据库回传旧快照时不能先跳回原顺序", listOf(2L, 1L, 3L), state.orderedIds)
+        state.sync(listOf(row(2), row(1), row(3)), reorderMode = false)
+        state.sync(listOf(row(3), row(2), row(1)), reorderMode = false)
+        assertEquals("确认保存后仍应接受后续外部顺序", listOf(3L, 2L, 1L), state.orderedIds)
+    }
+
+    @Test
     fun `ordered falls back when rows are not in sync`() {
         val state = state()
         val rows = listOf(row(1), row(2))

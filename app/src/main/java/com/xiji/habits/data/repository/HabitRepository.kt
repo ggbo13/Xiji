@@ -1,5 +1,6 @@
 package com.xiji.habits.data.repository
 
+import androidx.room.withTransaction
 import com.xiji.habits.data.local.AppDatabase
 import com.xiji.habits.data.toDomain
 import com.xiji.habits.data.toEntity
@@ -172,7 +173,16 @@ class HabitRepository(
 
     suspend fun reorder(ids: List<Long>) {
         val now = System.currentTimeMillis()
-        ids.forEachIndexed { index, id -> habitDao.updateSortOrder(id, index, now) }
+        db.withTransaction {
+            // 筛选后的列表只替换自己的槽位，未显示的习惯保持原位置。
+            val all = habitDao.getAllOnce()
+            val existing = all.map { it.id }.toSet()
+            val requested = ids.distinct().filter { it in existing }
+            val moved = requested.toSet()
+            val order = requested.iterator()
+            val merged = all.map { if (it.id in moved) order.next() else it.id }
+            merged.forEachIndexed { index, id -> habitDao.updateSortOrder(id, index, now) }
+        }
         onDataChanged()
     }
 

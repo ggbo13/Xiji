@@ -50,10 +50,9 @@ internal fun splicePendingOrder(
  *
  * 做法：拖动时不让 LazyColumn 自己搬东西，而是
  * 1. 卡片本身的位移由 [translation] 直接跟随手指（graphicsLayer.translationY）；
- * 2. 越过分隔线时立即交换 [orderedIds] 里的位置，其余卡片用 animateItem 平滑让位；
- * 3. 交换后卡片在布局里的真实 offset 会突变，于是用 layout 变化回调把
- *    translation 重新算成「手指位置 − 新 offset」，视觉上保持连续；
- * 4. 松手后用一条短弹簧把残余位移吸到 0，结束在正确的槽位。
+ * 2. 按相邻卡片的中心与高度判定换位，其余卡片用 animateItem 平滑让位；
+ * 3. 位移直接读取当前布局坐标，使换位和自动滚动与绘制使用同一帧的数据；
+ * 4. 松手后保留屏幕位置，再用短弹簧回到新槽位，等待数据库确认保存。
  */
 @Stable
 class ReorderState(
@@ -75,20 +74,46 @@ class ReorderState(
     var settlingId by mutableStateOf<Long?>(null)
         private set
 
-    /** 被拖起的卡片相对自己布局位置的位移 */
-    var translation by mutableFloatStateOf(0f)
-        private set
+    private var settleProgress by mutableFloatStateOf(1f)
+    private var settleStartTop = 0f
+
+    /** 在同一帧读取布局坐标，避免换位后等待异步回调才修正卡片位置。 */
+    val translation: Float
+        get() {
+            val id = draggingId ?: settlingId ?: return 0f
+            val visible = listState.layoutInfo.visibleItemsInfo
+            val item = visible.firstOrNull { it.key == pendingKey(id) } ?: return 0f
+            if (draggingId == null) return (settleStartTop - item.offset) * (1f - settleProgress)
+            val pending = visible.filter { (it.key as? String)?.startsWith(PENDING_KEY_PREFIX) == true }
+            // 换位前后使用当前布局的整个分组边界，不能混用新顺序和旧坐标。
+            val first = pending.minByOrNull { it.offset }
+                ?.takeIf { pending.any { it.key == pendingKey(orderedIds.firstOrNull()) } }
+            val last = pending.maxByOrNull { it.offset + it.size }
+                ?.takeIf { pending.any { it.key == pendingKey(orderedIds.lastOrNull()) } }
+            val minTop = first?.offset?.toFloat() ?: Float.NEGATIVE_INFINITY
+            val maxTop = last?.let { (it.offset + it.size - item.size).toFloat() } ?: Float.POSITIVE_INFINITY
+            val top = (startOffset + totalDrag).coerceIn(minTop, maxTop)
+            return top - item.offset
+        }
 
     private var startOffset = 0f
-    private var totalDrag = 0f
+    private var totalDrag by mutableFloatStateOf(0f)
     private var orderAtGrab: List<Long> = emptyList()
+    private var pendingCommit: List<Long>? = null
     private var settleJob: Job? = null
     private var autoScrollJob: Job? = null
 
     /** 同步外部数据；排序模式下本地顺序优先，只补齐新增/移除的项 */
     fun sync(rows: List<HabitRowUi>, reorderMode: Boolean) {
-        if (draggingId != null) return
         val incoming = rows.map { it.habit.id }
+        if (draggingId != null) {
+            if (!reorderMode || draggingId !in incoming) endDrag(cancelled = true) else return
+        }
+        val awaiting = pendingCommit
+        if (awaiting != null) {
+            if (incoming == awaiting || incoming.toSet() != awaiting.toSet()) pendingCommit = null
+            else if (!reorderMode) return
+        }
         if (!reorderMode) {
             if (orderedIds != incoming) orderedIds = incoming
             return
@@ -114,11 +139,10 @@ class ReorderState(
         detectDragGestures(
             onDragStart = { beginDrag(habitId) },
             onDragEnd = { endDrag() },
-            onDragCancel = { endDrag() }
+            onDragCancel = { endDrag(cancelled = true) }
         ) { change, drag ->
             change.consume()
             totalDrag += drag.y
-            applyTranslation()
             swapIfNeeded()
         }
     }
@@ -134,73 +158,80 @@ class ReorderState(
         if (to == from) return
         orderedIds = orderedIds.toMutableList().apply { add(to, removeAt(from)) }
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        pendingCommit = orderedIds
         onCommit(orderedIds)
     }
 
-    /** 布局变化（交换、自动滚动）后重新对齐位移 */
+    /** 交换或自动滚动改变布局后，继续检查相邻卡片是否需要换位。 */
     fun onLayoutChanged() {
-        if (draggingId != null) applyTranslation()
+        if (draggingId != null) swapIfNeeded()
     }
 
     private fun beginDrag(id: Long) {
         val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == pendingKey(id) } ?: return
+        val visualTop = info.offset + if (settlingId == id) translation else 0f
         settleJob?.cancel()
         settlingId = null
         autoScrollJob?.cancel()
-        startOffset = info.offset.toFloat()
+        startOffset = visualTop
         totalDrag = 0f
-        translation = 0f
+        settleProgress = 1f
         orderAtGrab = orderedIds
         draggingId = id
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         autoScrollJob = scope.launch { autoScrollLoop(id) }
     }
 
-    private fun applyTranslation() {
-        val id = draggingId ?: return
-        val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == pendingKey(id) }
-        val layoutOffset = info?.offset?.toFloat() ?: startOffset
-        translation = startOffset + totalDrag - layoutOffset
-    }
-
     private fun swapIfNeeded() {
         val id = draggingId ?: return
         val visible = listState.layoutInfo.visibleItemsInfo
         val self = visible.firstOrNull { it.key == pendingKey(id) } ?: return
-        // 卡片视觉中心落在谁身上，就和谁换位
+        // 越过相邻卡片的中心才换位；换位后必须真正向回拖动才能反向换位。
         val center = self.offset + translation + self.size / 2f
-        val target = visible.firstOrNull {
-            val key = it.key as? String ?: return@firstOrNull false
-            key.startsWith(PENDING_KEY_PREFIX) && it.key != self.key &&
-                center >= it.offset && center <= it.offset + it.size
-        } ?: return
-        val key = target.key as? String ?: return
-        val targetId = key.removePrefix(PENDING_KEY_PREFIX).toLongOrNull() ?: return
         val from = orderedIds.indexOf(id)
-        val to = orderedIds.indexOf(targetId)
-        if (from < 0 || to < 0 || from == to) return
+        if (from < 0) return
+        val direction = if (translation > 0f) 1 else if (translation < 0f) -1 else return
+        val to = from + direction
+        val targetId = orderedIds.getOrNull(to) ?: return
+        val target = visible.firstOrNull { it.key == pendingKey(targetId) } ?: return
+        // 本地顺序已变但布局还没更新时，不能用旧坐标再次换位。
+        if ((target.index - self.index) * direction <= 0) return
+        val targetCenter = target.offset + target.size / 2f
+        // 高卡片到达相邻槽位时，其中心可能仍超出矮卡片中心，按高度差补偿阈值。
+        val crossingCenter = center + direction * ((self.size - target.size).coerceAtLeast(0) / 2f)
+        if (direction > 0 && crossingCenter < targetCenter || direction < 0 && crossingCenter > targetCenter) return
+        if (self.index == listState.firstVisibleItemIndex || target.index == listState.firstVisibleItemIndex) {
+            listState.requestScrollToItem(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+        }
         orderedIds = orderedIds.toMutableList().apply { add(to, removeAt(from)) }
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
-    private fun endDrag() {
+    private fun endDrag(cancelled: Boolean = false) {
         val id = draggingId ?: return
-        settlingId = if (!reduceMotion && translation != 0f) id else null
+        val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == pendingKey(id) }
+        settleStartTop = (item?.offset ?: 0) + translation
+        settleProgress = 0f
+        settlingId = if (!cancelled && !reduceMotion) id else null
         draggingId = null
         autoScrollJob?.cancel()
         autoScrollJob = null
-        if (orderedIds != orderAtGrab) onCommit(orderedIds)
-        if (reduceMotion || translation == 0f) {
-            translation = 0f
+        if (cancelled) orderedIds = orderAtGrab
+        else if (orderedIds != orderAtGrab) {
+            pendingCommit = orderedIds
+            onCommit(orderedIds)
+        }
+        if (settlingId == null) {
+            settleProgress = 1f
             return
         }
         settleJob?.cancel()
         settleJob = scope.launch {
-            val from = translation
-            animate(from, 0f, animationSpec = XijiMotion.settle(false)) { value, _ ->
-                translation = value
+            // 保留松手时的屏幕位置，目标槽位随布局更新，避免刚换位就松手时多跳一格。
+            animate(0f, 1f, animationSpec = XijiMotion.settle(false)) { value, _ ->
+                settleProgress = value.coerceIn(0f, 1f)
             }
-            translation = 0f
+            settleProgress = 1f
             settlingId = null
         }
     }
@@ -221,8 +252,8 @@ class ReorderState(
                 val top = self.offset + translation
                 val bottom = top + self.size
                 val overflow = when {
-                    top < edgePx -> top - edgePx
-                    bottom > viewport - edgePx -> bottom - (viewport - edgePx)
+                    top < edgePx && orderedIds.firstOrNull() != id -> top - edgePx
+                    bottom > viewport - edgePx && orderedIds.lastOrNull() != id -> bottom - (viewport - edgePx)
                     else -> 0f
                 }
                 if (overflow != 0f) {

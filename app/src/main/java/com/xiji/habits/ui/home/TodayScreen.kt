@@ -141,7 +141,7 @@ fun TodayScreen(
         )
     }
     LaunchedEffect(pendingRows, reorderMode) { reorder.sync(pendingRows, reorderMode) }
-    // 交换/自动滚动会改变卡片在布局里的 offset，跟着重算位移，视觉上才不会跳
+    // 布局变化后继续检查换位；位移在绘制时直接读取，避免异步修正导致跳动。
     LaunchedEffect(reorder) {
         snapshotFlow {
             listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == pendingKey(reorder.draggingId) }?.offset

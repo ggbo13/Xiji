@@ -6,7 +6,7 @@
 
 [下载流畅测试版](https://github.com/ggbo13/Xiji/releases/latest) · [性能优化与验证记录](PERFORMANCE_REPORT.md)
 
-本版针对页面滚动与拖动排序优化：修复排序时整列卡片一起位移，把统计计算移到后台，并减少历史记录的重复扫描和动画布局开销。121 项自动化测试通过，尚未测量真机帧率。
+1.4.1 修复排序临界点反复换位、松手跳位、退出排序回退和筛选后错序，支持高低卡片交换与分组边界限制。保留后台统计和绘制优化，131 项自动化测试通过，尚未测量真机帧率。
 
 | 今日 | 日历 | 统计 | 详情 |
 |---|---|---|---|
@@ -18,13 +18,14 @@
 
 ### 直接安装 APK
 
-从 [Releases](https://github.com/ggbo13/Xiji/releases/latest) 下载 `Xiji-smooth-1.4.0.apk`，在手机上安装，或使用：
+从 [Releases](https://github.com/ggbo13/Xiji/releases/latest) 下载 `Xiji-smooth-1.4.1.apk`，在手机上安装，或使用：
 
 ```bash
-adb install Xiji-smooth-1.4.0.apk
+adb install -r Xiji-smooth-1.4.1.apk
 ```
 
 - 测试版包名：`com.xiji.habits.smooth`，名称为“习迹·流畅测试”，采用 release 配置并关闭调试模式
+- 1.4.1 沿用上一版流畅测试版的签名，支持直接覆盖升级
 - 测试版与原版共存；需要使用现有习惯时，可在原版导出备份后，在测试版导入
 - 最低 Android 8.0（API 26），target SDK 35
 - 首次启动不需要任何账号或网络
@@ -41,7 +42,7 @@ echo "sdk.dir=/path/to/Android/Sdk" > local.properties
 ./gradlew :app:assembleDebug
 # 产物：app/build/outputs/apk/debug/app-debug.apk
 
-# 3. 运行单元测试（121 项）
+# 3. 运行单元测试（131 项）
 ./gradlew :app:testDebugUnitTest
 
 # 4. 生成界面截图（Robolectric 原生渲染）
@@ -176,7 +177,7 @@ keyPassword=******
 
 ## 6. 已知问题与限制
 
-1. **尚未完成真机 / 模拟器验证。** 当前已通过 Gradle 构建 APK、121 项 JVM/Robolectric 单元测试和原生图形渲染测试。
+1. **尚未完成真机 / 模拟器验证。** 当前已通过 Gradle 构建 APK、131 项 JVM/Robolectric 单元测试和原生图形渲染测试。
    首次真机安装时请重点检查：通知权限弹窗、精确闹钟授权、小组件添加、中文输入法下的编辑页。
 2. **Glance 传递依赖会引入 WorkManager。** `androidx.glance:glance:1.1.1` 硬依赖 `androidx.work:work-runtime`，
    Gradle 无法排除（已在依赖树中确认）。因此合并后的 Manifest 会带上 `WAKE_LOCK` 与 `FOREGROUND_SERVICE`。
@@ -215,7 +216,7 @@ Xiji/
 │   ├── reminder/      AlarmManager 调度与通知
 │   ├── backup/        JSON/CSV 导入导出
 │   └── widget/        Glance 小组件
-├── app/src/test/      121 项单元测试
+├── app/src/test/      131 项单元测试
 ├── app/schemas/       Room schema 导出
 └── docs/              设计文档与截图
 ```

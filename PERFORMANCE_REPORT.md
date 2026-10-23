@@ -19,10 +19,10 @@
 ## 验证结果
 
 - 原有 119 项测试通过。
-- 新增两项回归测试先在原实现上失败，再在修复后通过：
+- 1.4.0 新增的两项回归测试先在原实现上失败，再在修复后通过：
   - 真实 Compose 手势检查拖动和松手回弹期间，邻近卡片保持原位。
   - 统计测试检查历史记录的访问次数，防止重新出现每个习惯扫描全表的问题。
-- 全量结果：121 项测试，0 失败、0 错误。
+- 1.4.1 新增 10 项排序回归测试；当前全量结果为 131 项测试，0 失败、0 错误。
 - Android Lint：0 错误，24 个警告、1 条提示。提示涉及依赖版本、目标 API、资源和已有写法等，未扩大本次修改范围。
 - 首页、暗色模式、窄屏、日历、统计、详情和排序等页面通过 Robolectric 渲染测试。
 
@@ -32,7 +32,7 @@
 
 ## 测试版安装
 
-测试版包名为 `com.xiji.habits.smooth`，版本为 `1.4.0-smooth`，采用 release 配置并关闭调试模式，使用本机调试证书签名。
+测试版包名为 `com.xiji.habits.smooth`，版本为 `1.4.1-smooth`（versionCode 6），采用 release 配置并关闭调试模式，使用本机调试证书签名。沿用 1.4.0 流畅测试版签名，支持直接覆盖升级。
 
 源码附带 APK 与本机签名不同，因此提供独立包名的共存测试版，安装后保留原应用和数据。测试版拥有独立数据；需要体验现有习惯时，可先在原应用“设置 → 备份”导出，再在测试版导入。
 
@@ -46,3 +46,16 @@
 ```
 
 主要依据：[Compose 性能最佳实践](https://developer.android.com/develop/ui/compose/performance/bestpractices)、[Compose 图形修饰符](https://developer.android.com/develop/ui/compose/graphics/draw/modifiers)、[Kotlin Flow 的 flowOn](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/flow-on.html)。
+
+## 1.4.1 排序稳定性修复
+
+- 换位时读取同一帧的布局坐标，避免异步补偿导致卡片短暂跳到错误位置。
+- 使用相邻卡片的中心判定换位，并按高度差调整阈值，支持带进度条的数量型卡片与普通卡片交换。
+- 限制拖动范围在待完成分组内；长列表在边缘停留时继续自动滚动和换位。
+- 松手回弹保留原屏幕位置，目标随新槽位布局更新，修复换位瞬间松手时多跳一格。
+- 系统取消拖动时恢复原顺序；退出排序时保留本地结果，直到数据库确认保存。
+- 在 Room 事务中整批保存顺序；分类筛选下只替换可见项的槽位，隐藏项保留原位置。
+
+新增测试覆盖：不同高度卡片逐帧拖动、较高卡片上移、临界点慢速拖动、手势取消、已完成分组边界、换位瞬间松手、长列表边缘停留、保存确认前退出排序、写入失败回滚，以及筛选排序保留隐藏项位置。
+
+验证命令：`./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleSmooth`，结果为 BUILD SUCCESSFUL。

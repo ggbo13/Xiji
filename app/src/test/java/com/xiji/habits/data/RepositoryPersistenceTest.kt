@@ -174,6 +174,35 @@ class RepositoryPersistenceTest {
     }
 
     @Test
+    fun `failed reorder keeps every original position`() = runTest {
+        val a = repo.createHabit(habit("A"))
+        val b = repo.createHabit(habit("B"))
+        val c = repo.createHabit(habit("C"))
+        // 在内存测试库模拟中途写入失败，确保排序不会只保存一半。
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_test_reorder BEFORE UPDATE OF sortOrder ON habits " +
+                "WHEN NEW.id = $b BEGIN SELECT RAISE(ABORT, '测试排序失败'); END"
+        )
+        val result = runCatching { repo.reorder(listOf(c, b, a)) }
+        assertTrue("测试必须触发中途写入失败", result.isFailure)
+        val stored = repo.allHabitsOnce()
+        assertEquals(listOf(a, b, c), stored.map { it.id })
+        assertEquals(listOf(0, 1, 2), stored.map { it.sortOrder })
+    }
+
+    @Test
+    fun `reordering filtered habits preserves hidden positions`() = runTest {
+        val a = repo.createHabit(habit("A"))
+        val b = repo.createHabit(habit("B"))
+        val c = repo.createHabit(habit("C"))
+        val d = repo.createHabit(habit("D"))
+        repo.reorder(listOf(c, a))
+        val stored = repo.allHabitsOnce()
+        assertEquals(listOf(c, b, a, d), stored.map { it.id })
+        assertEquals(listOf(0, 1, 2, 3), stored.map { it.sortOrder })
+    }
+
+    @Test
     fun `reorder persists`() = runTest {
         val a = repo.createHabit(habit("A"))
         val b = repo.createHabit(habit("B"))

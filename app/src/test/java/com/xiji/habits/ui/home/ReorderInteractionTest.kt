@@ -10,12 +10,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.xiji.habits.domain.model.DayState
 import com.xiji.habits.domain.model.Habit
 import com.xiji.habits.domain.model.HabitType
+import com.xiji.habits.domain.model.HabitRecord
+import com.xiji.habits.domain.model.RecordStatus
 import com.xiji.habits.domain.model.ScheduleSpec
 import com.xiji.habits.ui.theme.AccentTheme
 import com.xiji.habits.ui.theme.LocalXijiColors
@@ -61,10 +64,11 @@ class ReorderInteractionTest {
         weekDone = 0, weekTarget = 0, categoryName = null, isPaused = false
     )
 
-    private fun content() {
-        val rows = listOf(
+    private fun content(
+        rows: List<HabitRowUi> = listOf(
             row(1, "阅读"), row(2, "跑步"), row(3, "冥想"), row(4, "写日记", done = true)
         )
+    ) {
         val state = HomeUiState(
             today = today, selectedDate = today,
             greeting = "早上好，今天也要加油。",
@@ -158,6 +162,189 @@ class ReorderInteractionTest {
         assertTrue("被拖动的卡片应跟随手指", draggedTop > originalDraggedTop + 1f)
         assertEquals("未拖动的卡片不应共享手势位移", originalNeighbourTop, neighbourTop, 1f)
         assertEquals("松手回弹也不应移动邻近卡片", originalNeighbourTop, settlingNeighbourTop, 1f)
+    }
+
+    @Test
+    fun draggingAcrossDifferentHeightsStaysUnderTheFinger() {
+        val water = row(2, "喝水").let {
+            it.copy(
+                habit = it.habit.copy(type = HabitType.QUANTITY, targetValue = 8.0, targetUnit = "杯"),
+                state = DayState.PARTIAL,
+                record = HabitRecord(2, 2, today, RecordStatus.FAILED, 5.0, null, 0, 0)
+            )
+        }
+        content(listOf(row(1, "学习"), water, row(5, "散步"), row(3, "写日记", done = true), row(4, "冥想", done = true)))
+        rule.onNodeWithText("排序").performClick()
+        rule.waitForIdle()
+        val dragged = rule.onNodeWithContentDescription("拖动 学习 调整顺序")
+        val root = rule.onRoot()
+        val start = dragged.fetchSemanticsNode().boundsInRoot.center
+        rule.mainClock.autoAdvance = false
+        root.performTouchInput {
+            down(start)
+            moveBy(Offset(0f, 24.dp.toPx()))
+        }
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        val initialTop = dragged.fetchSemanticsNode().boundsInRoot.top
+        val step = with(rule.density) { 20.dp.toPx() }
+        val positions = mutableListOf<Float>()
+        repeat(6) {
+            // 从固定的根节点注入手势，每次移动后都真实布局一帧。
+            root.performTouchInput { moveBy(Offset(0f, step)) }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+            positions += dragged.fetchSemanticsNode().boundsInRoot.top
+        }
+        root.performTouchInput { up() }
+        rule.mainClock.autoAdvance = true
+        println("逐帧拖动：起点 $initialTop，每帧步长 $step，实际位置 $positions")
+        positions.forEachIndexed { index, top ->
+            assertEquals("第 ${index + 1} 帧换位后卡片仍应跟随手指", initialTop + step * (index + 1), top, 4f)
+        }
+        rule.waitForIdle()
+        assertEquals(listOf(2L, 1L, 5L, 3L, 4L), committed)
+    }
+
+    @Test
+    fun tallerQuantityCardCanMoveAboveAShortCard() {
+        val water = row(2, "喝水").let {
+            it.copy(
+                habit = it.habit.copy(type = HabitType.QUANTITY, targetValue = 8.0, targetUnit = "杯"),
+                state = DayState.PARTIAL,
+                record = HabitRecord(2, 2, today, RecordStatus.FAILED, 5.0, null, 0, 0)
+            )
+        }
+        content(listOf(row(1, "学习"), water, row(3, "写日记", done = true)))
+        rule.onNodeWithText("排序").performClick()
+        rule.waitForIdle()
+        val start = rule.onNodeWithContentDescription("拖动 喝水 调整顺序").fetchSemanticsNode().boundsInRoot.center
+        val root = rule.onRoot()
+        rule.mainClock.autoAdvance = false
+        root.performTouchInput { down(start) }
+        repeat(8) {
+            root.performTouchInput { moveBy(Offset(0f, -20.dp.toPx())) }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+        }
+        root.performTouchInput { up() }
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertEquals("带进度条的高卡片也能上移，不能被分组边界卡住", listOf(2L, 1L, 3L), committed)
+    }
+
+    @Test
+    fun slowShortDragDoesNotSwapBackAndForth() {
+        content()
+        rule.onNodeWithText("排序").performClick()
+        rule.waitForIdle()
+        val handle = rule.onNodeWithContentDescription("拖动 阅读 调整顺序")
+        val start = handle.fetchSemanticsNode().boundsInRoot.center
+        val root = rule.onRoot()
+        rule.mainClock.autoAdvance = false
+        root.performTouchInput {
+            down(start)
+            moveBy(Offset(0f, 24.dp.toPx()))
+        }
+        repeat(25) {
+            root.performTouchInput { moveBy(Offset(0f, 2.dp.toPx())) }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+        }
+        root.performTouchInput { up() }
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertEquals("卡片中心尚未经过下一张卡片中心，不应提前换位", null, committed)
+    }
+
+    @Test
+    fun cancelledDragDoesNotSaveAnAccidentalOrder() {
+        content()
+        rule.onNodeWithText("排序").performClick()
+        rule.waitForIdle()
+        val handle = rule.onNodeWithContentDescription("拖动 阅读 调整顺序")
+        val start = handle.fetchSemanticsNode().boundsInRoot.center
+        rule.onRoot().performTouchInput {
+            down(start)
+            moveBy(Offset(0f, 24.dp.toPx()))
+            moveBy(Offset(0f, 110.dp.toPx()))
+            cancel()
+        }
+        rule.waitForIdle()
+        assertEquals("系统取消手势时不应保存未确认的顺序", null, committed)
+        val first = handle.fetchSemanticsNode().boundsInRoot.top
+        val second = rule.onNodeWithContentDescription("拖动 跑步 调整顺序").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("取消手势后恢复原顺序", first < second)
+    }
+
+    @Test
+    fun lastPendingCardDoesNotCoverTheCompletedGroup() {
+        content(listOf(row(1, "学习"), row(2, "喝水"), row(3, "写日记", done = true), row(4, "冥想", done = true)))
+        rule.onNodeWithText("排序").performClick()
+        rule.waitForIdle()
+        val handle = rule.onNodeWithContentDescription("拖动 喝水 调整顺序")
+        val originalTop = handle.fetchSemanticsNode().boundsInRoot.top
+        val start = handle.fetchSemanticsNode().boundsInRoot.center
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput {
+            down(start)
+            moveBy(Offset(0f, 24.dp.toPx()))
+            moveBy(Offset(0f, 120.dp.toPx()))
+        }
+        rule.mainClock.advanceTimeBy(64)
+        rule.waitForIdle()
+        val heldTop = handle.fetchSemanticsNode().boundsInRoot.top
+        rule.onRoot().performTouchInput { up() }
+        rule.mainClock.autoAdvance = true
+        assertEquals("最后一张待完成卡片不能拖进已完成分组", originalTop, heldTop, 4f)
+    }
+
+    @Test
+    fun releasingOnTheSwapFrameDoesNotTeleportTheCard() {
+        content()
+        rule.onNodeWithText("排序").performClick()
+        rule.waitForIdle()
+        val handle = rule.onNodeWithContentDescription("拖动 阅读 调整顺序")
+        val originalTop = handle.fetchSemanticsNode().boundsInRoot.top
+        val start = handle.fetchSemanticsNode().boundsInRoot.center
+        rule.mainClock.autoAdvance = false
+        rule.onRoot().performTouchInput {
+            down(start)
+            moveBy(Offset(0f, 24.dp.toPx()))
+            moveBy(Offset(0f, 100.dp.toPx()))
+            up()
+        }
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        val firstFrameTop = handle.fetchSemanticsNode().boundsInRoot.top
+        rule.mainClock.autoAdvance = true
+        val maxMove = with(rule.density) { 140.dp.toPx() }
+        assertTrue("松手换位的第一帧不能额外跳过一个卡片高度", firstFrameTop - originalTop <= maxMove)
+        rule.waitForIdle()
+        assertEquals(listOf(2L, 1L, 3L, 4L), committed)
+    }
+
+    @Test
+    fun holdingAtTheEdgeContinuesReorderingALongList() {
+        content((1L..12L).map { row(it, "习惯$it") })
+        rule.onNodeWithText("排序").performClick()
+        rule.waitForIdle()
+        val root = rule.onRoot()
+        val start = rule.onNodeWithContentDescription("拖动 习惯1 调整顺序").fetchSemanticsNode().boundsInRoot.center
+        val destination = root.fetchSemanticsNode().boundsInRoot.bottom - with(rule.density) { 56.dp.toPx() }
+        rule.mainClock.autoAdvance = false
+        root.performTouchInput {
+            down(start)
+            moveBy(Offset(0f, 24.dp.toPx()))
+            moveTo(Offset(start.x, destination))
+        }
+        rule.mainClock.advanceTimeBy(600)
+        rule.waitForIdle()
+        root.performTouchInput { up() }
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertTrue("手指停在边缘时，仍应自动滚动并跨过后续卡片", (committed?.indexOf(1L) ?: -1) >= 4)
+        assertEquals((1L..12L).toSet(), committed?.toSet())
     }
 
     @Test
