@@ -21,7 +21,7 @@ android {
         applicationId = "com.xiji.habits"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
+        versionCode = 7
         versionName = "1.4.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -53,14 +53,14 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (keystorePropsFile.exists()) signingConfig = signingConfigs.getByName("release")
         }
-        // 原调试包的签名不可复用，提供独立包名的测试版，保留用户已安装版本及其数据。
-        create("smooth") {
+        // 正式发布沿用已安装版本的内部标识与签名，支持直接覆盖升级。
+        create("production") {
             initWith(getByName("release"))
             applicationIdSuffix = ".smooth"
-            versionNameSuffix = "-smooth"
+            versionNameSuffix = ""
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
-            resValue("string", "app_name", "习迹·流畅测试")
+            resValue("string", "app_name", "习迹")
         }
     }
     compileOptions {

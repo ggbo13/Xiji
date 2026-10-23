@@ -30,19 +30,19 @@
 
 当前环境没有连接 Android 真机，尚未测量设备上的滚动帧率、掉帧比例及 60/90/120Hz 下的实际手感。
 
-## 测试版安装
+## 正式版安装
 
-测试版包名为 `com.xiji.habits.smooth`，版本为 `1.4.1-smooth`（versionCode 6），采用 release 配置并关闭调试模式，使用本机调试证书签名。沿用 1.4.0 流畅测试版签名，支持直接覆盖升级。
+应用名称为“习迹”，显示版本为 `1.4.1`（versionCode 7），安装包为 `Xiji-1.4.1.apk`。正式版采用 release 配置并关闭调试模式，当前 APK 沿用上一版的本机调试证书签名与内部包名 `com.xiji.habits.smooth`，支持直接覆盖上一版安装。
 
-源码附带 APK 与本机签名不同，因此提供独立包名的共存测试版，安装后保留原应用和数据。测试版拥有独立数据；需要体验现有习惯时，可先在原应用“设置 → 备份”导出，再在测试版导入。
+从更早的独立安装版本迁移数据时，可先在原应用“设置 → 备份”导出，再在当前版本导入。
 
-正式覆盖升级需要原应用的签名私钥。现有 `debug`、`release` 构建配置及正式包名保持原样，新增 `smooth` 构建类型便于独立验证。
+对外发布使用 `production` 构建类型；应用名、版本号及安装包名使用正式版名称。内部应用标识保留是为了兼容已经安装的版本。
 
 ## 复现命令
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
-.\gradlew.bat :app:assembleSmooth
+.\gradlew.bat :app:assembleProduction
 ```
 
 主要依据：[Compose 性能最佳实践](https://developer.android.com/develop/ui/compose/performance/bestpractices)、[Compose 图形修饰符](https://developer.android.com/develop/ui/compose/graphics/draw/modifiers)、[Kotlin Flow 的 flowOn](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/flow-on.html)。
@@ -58,4 +58,4 @@
 
 新增测试覆盖：不同高度卡片逐帧拖动、较高卡片上移、临界点慢速拖动、手势取消、已完成分组边界、换位瞬间松手、长列表边缘停留、保存确认前退出排序、写入失败回滚，以及筛选排序保留隐藏项位置。
 
-验证命令：`./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleSmooth`，结果为 BUILD SUCCESSFUL。
+排序修复验证命令为 `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleSmooth`，结果为 BUILD SUCCESSFUL。正式版构建现使用 `:app:assembleProduction`，保留上述已验证的业务代码。

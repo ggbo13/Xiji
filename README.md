@@ -4,7 +4,7 @@
 
 **不联网、不登录、无广告、无埋点、无云同步。** 所有数据只保存在设备本地，且明确禁用系统自动云备份。
 
-[下载流畅测试版](https://github.com/ggbo13/Xiji/releases/latest) · [性能优化与验证记录](PERFORMANCE_REPORT.md)
+[下载正式版](https://github.com/ggbo13/Xiji/releases/latest) · [性能优化与验证记录](PERFORMANCE_REPORT.md)
 
 1.4.1 修复排序临界点反复换位、松手跳位、退出排序回退和筛选后错序，支持高低卡片交换与分组边界限制。保留后台统计和绘制优化，131 项自动化测试通过，尚未测量真机帧率。
 
@@ -18,15 +18,15 @@
 
 ### 直接安装 APK
 
-从 [Releases](https://github.com/ggbo13/Xiji/releases/latest) 下载 `Xiji-smooth-1.4.1.apk`，在手机上安装，或使用：
+从 [Releases](https://github.com/ggbo13/Xiji/releases/latest) 下载 `Xiji-1.4.1.apk`，在手机上安装，或使用：
 
 ```bash
-adb install -r Xiji-smooth-1.4.1.apk
+adb install -r Xiji-1.4.1.apk
 ```
 
-- 测试版包名：`com.xiji.habits.smooth`，名称为“习迹·流畅测试”，采用 release 配置并关闭调试模式
-- 1.4.1 沿用上一版流畅测试版的签名，支持直接覆盖升级
-- 测试版与原版共存；需要使用现有习惯时，可在原版导出备份后，在测试版导入
+- 应用名称：习迹；显示版本：`1.4.1`；安装包：`Xiji-1.4.1.apk`
+- 正式版采用 release 配置并关闭调试模式，沿用上一版的内部包名和签名，支持直接覆盖升级
+- 从更早的独立安装版本迁移数据时，可先导出备份，再在当前版本导入
 - 最低 Android 8.0（API 26），target SDK 35
 - 首次启动不需要任何账号或网络
 
@@ -49,9 +49,9 @@ echo "sdk.dir=/path/to/Android/Sdk" > local.properties
 ./gradlew :app:testDebugUnitTest --tests "com.xiji.habits.ui.*"
 # 产物：app/build/screenshots/*.png
 
-# 5. 构建可共存的流畅测试版（使用本机调试证书签名）
-./gradlew :app:assembleSmooth
-# 产物：app/build/outputs/apk/smooth/app-smooth.apk
+# 5. 构建正式版配置（默认使用本机调试证书签名）
+./gradlew :app:assembleProduction
+# 产物：app/build/outputs/apk/production/app-production.apk
 
 # 6. Android 静态检查
 ./gradlew :app:lintDebug
