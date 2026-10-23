@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  图标：一段未闭合的进度环 + 中央对勾，表达「持续积累 + 今天完成」。
+  注意：所有开放路径必须 fillColor="#00000000"，否则会被填充成实心色块。
+  图形控制在 108 视口中心直径 66 的安全区内。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 进度环：从 -80° 顺时针扫过 290°，左上留出缺口 -->
+    <path
+        android:pathData="M58.17,30.37 A24,24 0 1 1 33.22,42.00"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- 对勾 -->
+    <path
+        android:pathData="M43.5,54.2 L50.6,61.3 L65.2,45.6"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+
+</vector>

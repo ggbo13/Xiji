@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Xiji</string>
+    <string name="widget_progress_label">Today progress</string>
+    <string name="widget_today_label">Today habits</string>
+    <string name="widget_progress_description">Shows today completion progress</string>
+    <string name="widget_today_description">Shows today habits with quick check-in</string>
+</resources>

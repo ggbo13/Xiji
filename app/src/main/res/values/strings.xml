@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">习迹</string>
+    <string name="widget_progress_label">今日进度</string>
+    <string name="widget_today_label">今日习惯</string>
+    <string name="widget_progress_description">显示今天的完成进度</string>
+    <string name="widget_today_description">显示今天的习惯列表并可直接打卡</string>
+</resources>

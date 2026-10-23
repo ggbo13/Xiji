@@ -1,0 +1,3 @@
+-keepattributes *Annotation*, InnerClasses, Signature
+-dontwarn kotlinx.coroutines.**
+-dontwarn org.slf4j.**
