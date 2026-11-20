@@ -104,7 +104,6 @@ fun TodayScreen(
     val colors = LocalXijiColors.current
     val isToday = state.selectedDate == state.today
     var actionTarget by remember { mutableStateOf<Habit?>(null) }
-    var quickAddTarget by remember { mutableStateOf<Habit?>(null) }
     var deleteTarget by remember { mutableStateOf<Habit?>(null) }
     var reorderMode by remember { mutableStateOf(false) }
 
@@ -375,7 +374,7 @@ fun TodayScreen(
                                     onToggle = onToggle,
                                     onOpenDetail = onOpenDetail,
                                     onLongPress = { actionTarget = it },
-                                    onQuickAdd = { quickAddTarget = it },
+                                    onQuickAdd = { habit, delta -> onAddValue(habit, delta) },
                                     reorderMode = reorderMode,
                                     dragHandleModifier = reorder.dragModifier(row.habit.id, reorderMode),
                                     dragActions = listOf(
@@ -482,17 +481,6 @@ fun TodayScreen(
             onPause = { actionTarget = null; onLongPress(habit) },
             onArchive = { actionTarget = null; onArchive(habit) },
             onDelete = { actionTarget = null; deleteTarget = habit }
-        )
-    }
-
-    quickAddTarget?.let { habit ->
-        QuickAddDialog(
-            habit = habit,
-            current = state.rows.firstOrNull { it.habit.id == habit.id }?.record?.accumulatedValue ?: 0.0,
-            target = state.rows.firstOrNull { it.habit.id == habit.id }?.targetValue ?: habit.targetValue,
-            onDismiss = { quickAddTarget = null },
-            onAdd = { v -> onAddValue(habit, v); quickAddTarget = null },
-            onOpenDetail = { quickAddTarget = null; onOpenDetail(habit.id) }
         )
     }
 

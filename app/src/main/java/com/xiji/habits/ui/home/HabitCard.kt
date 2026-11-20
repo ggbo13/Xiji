@@ -1,16 +1,25 @@
 package com.xiji.habits.ui.home
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,16 +28,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -58,7 +72,7 @@ fun HabitCard(
     onOpenDetail: (Long) -> Unit,
     onLongPress: (Habit) -> Unit,
     modifier: Modifier = Modifier,
-    onQuickAdd: ((Habit) -> Unit)? = null,
+    onQuickAdd: ((Habit, Double) -> Unit)? = null,
     reorderMode: Boolean = false,
     dragHandleModifier: Modifier = Modifier,
     dragActions: List<CustomAccessibilityAction> = emptyList()
@@ -150,24 +164,18 @@ fun HabitCard(
                     )
                 } else when {
                     habit.isQuantity && !done -> {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(accent.copy(alpha = if (colors.isDark) 0.25f else 0.12f))
-                                .combinedClickable(
-                                    onClick = { onQuickAdd?.invoke(habit) ?: onToggle(habit) },
-                                    onLongClick = { onOpenDetail(habit.id) }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Rounded.Add,
-                                contentDescription = "记录一次 ${habit.name}",
-                                tint = accent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        val current = row.record?.accumulatedValue ?: 0.0
+                        val target = if (row.targetValue > 0) row.targetValue else 1.0
+                        QuantityAddButton(
+                            habitName = habit.name,
+                            accent = accent,
+                            reduceMotion = reduceMotion,
+                            onAddOne = { onQuickAdd?.invoke(habit, 1.0) ?: onToggle(habit) },
+                            onFill = {
+                                val remaining = (target - current).coerceAtLeast(1.0)
+                                onQuickAdd?.invoke(habit, remaining) ?: onToggle(habit)
+                            }
+                        )
                     }
                     else -> CheckmarkButton(
                         checked = done,
@@ -183,6 +191,86 @@ fun HabitCard(
                 }
             }
         }
+    }
+}
+
+/** 计次快捷按钮：轻点加一，长按进度环走满后补足当天目标。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun QuantityAddButton(
+    habitName: String,
+    accent: Color,
+    reduceMotion: Boolean,
+    onAddOne: () -> Unit,
+    onFill: () -> Unit
+) {
+    val colors = LocalXijiColors.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val progress by animateFloatAsState(
+        targetValue = if (pressed && !reduceMotion) 1f else 0f,
+        animationSpec = if (reduceMotion) snap() else tween(
+            durationMillis = if (pressed) 500 else 120,
+            easing = LinearEasing
+        ),
+        label = "quantityAddProgress"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && !reduceMotion) 0.94f else 1f,
+        animationSpec = if (reduceMotion) snap() else spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "quantityAddScale"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(accent.copy(alpha = if (colors.isDark) 0.25f else 0.12f))
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClickLabel = "加 1",
+                onLongClickLabel = "补满",
+                onLongClick = onFill,
+                onClick = onAddOne
+            )
+            .semantics(mergeDescendants = true) {
+                contentDescription = "点按加 1 $habitName，长按补满"
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        if (progress > 0f) {
+            Canvas(Modifier.fillMaxSize()) {
+                val strokeWidth = 2.dp.toPx()
+                val inset = strokeWidth / 2f
+                drawArc(
+                    color = accent,
+                    startAngle = -90f,
+                    sweepAngle = 360f * progress,
+                    useCenter = false,
+                    topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                    size = androidx.compose.ui.geometry.Size(
+                        width = size.width - strokeWidth,
+                        height = size.height - strokeWidth
+                    ),
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                )
+            }
+        }
+        Text(
+            text = "+1",
+            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+            color = accent,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
