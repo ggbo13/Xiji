@@ -3,11 +3,15 @@ package com.xiji.habits.ui
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -49,6 +53,7 @@ import com.xiji.habits.ui.settings.SettingsScreen
 import com.xiji.habits.ui.settings.SettingsViewModel
 import com.xiji.habits.ui.statistics.StatsScreen
 import com.xiji.habits.ui.statistics.StatsViewModel
+import com.xiji.habits.ui.theme.LocalXijiColors
 
 @Composable
 fun XijiApp(container: AppContainer, reduceAnimation: Boolean) {
@@ -61,6 +66,7 @@ fun XijiApp(container: AppContainer, reduceAnimation: Boolean) {
     val snackbarHostState = remember { SnackbarHostState() }
     var widgetHelp by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val pageBackground = LocalXijiColors.current.pageBackground
 
     LaunchedEffect(Unit) {
         // 启动时恢复提醒（时间/时区变化、重启后由 BootReceiver 处理）
@@ -78,21 +84,53 @@ fun XijiApp(container: AppContainer, reduceAnimation: Boolean) {
     }
 
     androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) {
+        Box(Modifier.weight(1f).fillMaxSize().background(pageBackground)) {
             NavHost(
                 navController = navController,
                 startDestination = Routes.TODAY,
                 enterTransition = {
-                    if (reduceAnimation) fadeIn(tween(120))
-                    else slideInHorizontally(tween(240)) { it / 12 } + fadeIn(tween(200))
+                    val direction = bottomTabSwitchDirection(
+                        initialState.destination.route,
+                        targetState.destination.route
+                    )
+                    when {
+                        reduceAnimation -> fadeIn(tween(120))
+                        direction != null -> bottomTabEnterTransition(direction)
+                        else -> slideInHorizontally(tween(240)) { it / 12 } + fadeIn(tween(200))
+                    }
                 },
                 exitTransition = {
-                    if (reduceAnimation) fadeOut(tween(100)) else fadeOut(tween(160))
+                    val direction = bottomTabSwitchDirection(
+                        initialState.destination.route,
+                        targetState.destination.route
+                    )
+                    when {
+                        reduceAnimation -> fadeOut(tween(100))
+                        direction != null -> bottomTabExitTransition(direction)
+                        else -> fadeOut(tween(160))
+                    }
                 },
-                popEnterTransition = { fadeIn(tween(160)) },
+                popEnterTransition = {
+                    val direction = bottomTabSwitchDirection(
+                        initialState.destination.route,
+                        targetState.destination.route
+                    )
+                    when {
+                        reduceAnimation -> fadeIn(tween(120))
+                        direction != null -> bottomTabEnterTransition(direction)
+                        else -> fadeIn(tween(160))
+                    }
+                },
                 popExitTransition = {
-                    if (reduceAnimation) fadeOut(tween(100))
-                    else slideOutHorizontally(tween(220)) { it / 12 } + fadeOut(tween(160))
+                    val direction = bottomTabSwitchDirection(
+                        initialState.destination.route,
+                        targetState.destination.route
+                    )
+                    when {
+                        reduceAnimation -> fadeOut(tween(100))
+                        direction != null -> bottomTabExitTransition(direction)
+                        else -> slideOutHorizontally(tween(220)) { it / 12 } + fadeOut(tween(160))
+                    }
                 }
             ) {
                 composable(Routes.TODAY) { entry ->
@@ -349,3 +387,23 @@ fun XijiApp(container: AppContainer, reduceAnimation: Boolean) {
         )
     }
 }
+
+private val bottomTabRoutes = listOf(Routes.TODAY, Routes.CALENDAR, Routes.STATS, Routes.SETTINGS)
+
+/** 底部导航从右向左切页时返回 1，反向切页时返回 -1；其他页面不做方向动画。 */
+internal fun bottomTabSwitchDirection(fromRoute: String?, toRoute: String?): Int? {
+    val from = bottomTabRoutes.indexOf(fromRoute)
+    val to = bottomTabRoutes.indexOf(toRoute)
+    if (from < 0 || to < 0 || from == to) return null
+    return if (to > from) 1 else -1
+}
+
+private fun bottomTabEnterTransition(direction: Int): EnterTransition =
+    slideInHorizontally(
+        animationSpec = tween(260, easing = FastOutSlowInEasing)
+    ) { width -> direction * width / 8 } + fadeIn(tween(190))
+
+private fun bottomTabExitTransition(direction: Int): ExitTransition =
+    slideOutHorizontally(
+        animationSpec = tween(240, easing = FastOutSlowInEasing)
+    ) { width -> -direction * width / 10 } + fadeOut(tween(180))

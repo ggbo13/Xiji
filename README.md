@@ -6,7 +6,7 @@
 
 [下载正式版](https://github.com/ggbo13/Xiji/releases/latest) · [性能优化与验证记录](PERFORMANCE_REPORT.md)
 
-1.4.2 将计次习惯右侧按钮改为轻点加 1、长按进度环走满后补足当天目标。保留 1.4.1 的排序稳定性修复与性能优化，133 项自动化测试通过。
+1.4.3 修复底部菜单切页时的黑屏闪烁，页面会按菜单位置左右平滑移动并交叉淡入。保留 1.4.2 的计次快捷操作与 1.4.1 的排序稳定性修复，136 项自动化测试通过。
 
 | 今日 | 日历 | 统计 | 详情 |
 |---|---|---|---|
@@ -18,13 +18,13 @@
 
 ### 直接安装 APK
 
-从 [Releases](https://github.com/ggbo13/Xiji/releases/latest) 下载 `Xiji-1.4.2.apk`，在手机上安装，或使用：
+从 [Releases](https://github.com/ggbo13/Xiji/releases/latest) 下载 `Xiji-1.4.3.apk`，在手机上安装，或使用：
 
 ```bash
-adb install -r Xiji-1.4.2.apk
+adb install -r Xiji-1.4.3.apk
 ```
 
-- 应用名称：习迹；显示版本：`1.4.2`；安装包：`Xiji-1.4.2.apk`
+- 应用名称：习迹；显示版本：`1.4.3`；安装包：`Xiji-1.4.3.apk`
 - 正式版采用 release 配置并关闭调试模式，沿用上一版的内部包名和签名，支持直接覆盖升级
 - 从更早的独立安装版本迁移数据时，可先导出备份，再在当前版本导入
 - 最低 Android 8.0（API 26），target SDK 35
@@ -42,7 +42,7 @@ echo "sdk.dir=/path/to/Android/Sdk" > local.properties
 ./gradlew :app:assembleDebug
 # 产物：app/build/outputs/apk/debug/app-debug.apk
 
-# 3. 运行单元测试（133 项）
+# 3. 运行单元测试（136 项）
 ./gradlew :app:testDebugUnitTest
 
 # 4. 生成界面截图（Robolectric 原生渲染）
@@ -177,7 +177,7 @@ keyPassword=******
 
 ## 6. 已知问题与限制
 
-1. **尚未完成真机 / 模拟器验证。** 当前已通过 Gradle 构建 APK、133 项 JVM/Robolectric 单元测试和原生图形渲染测试。
+1. **尚未完成真机 / 模拟器验证。** 当前已通过 Gradle 构建 APK、136 项 JVM/Robolectric 单元测试和原生图形渲染测试。
    首次真机安装时请重点检查：通知权限弹窗、精确闹钟授权、小组件添加、中文输入法下的编辑页。
 2. **Glance 传递依赖会引入 WorkManager。** `androidx.glance:glance:1.1.1` 硬依赖 `androidx.work:work-runtime`，
    Gradle 无法排除（已在依赖树中确认）。因此合并后的 Manifest 会带上 `WAKE_LOCK` 与 `FOREGROUND_SERVICE`。
@@ -216,7 +216,7 @@ Xiji/
 │   ├── reminder/      AlarmManager 调度与通知
 │   ├── backup/        JSON/CSV 导入导出
 │   └── widget/        Glance 小组件
-├── app/src/test/      133 项单元测试
+├── app/src/test/      136 项单元测试
 ├── app/schemas/       Room schema 导出
 └── docs/              设计文档与截图
 ```
